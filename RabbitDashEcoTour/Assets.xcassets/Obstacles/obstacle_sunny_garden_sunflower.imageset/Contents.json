@@ -1,0 +1,23 @@
+{
+  "images" : [
+    {
+      "filename" : "obstacle_sunny_garden_sunflower.png",
+      "idiom" : "universal",
+      "scale" : "1x"
+    },
+    {
+      "filename" : "obstacle_sunny_garden_sunflower@2x.png",
+      "idiom" : "universal",
+      "scale" : "2x"
+    },
+    {
+      "filename" : "obstacle_sunny_garden_sunflower@3x.png",
+      "idiom" : "universal",
+      "scale" : "3x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

@@ -30,7 +30,7 @@ class GameViewController: UIViewController {
         skView.ignoresSiblingOrder = true
         skView.showsFPS = true
         skView.showsNodeCount = false
-        skView.showsPhysics = true
+        skView.showsPhysics = false
     }
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {

@@ -10,6 +10,12 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     var platformSpawnTimer: TimeInterval = 0
     let platformSpawnInterval: TimeInterval = 6.5  // Интервал спавна платформ
     
+    // Морковки
+    var carrots: [CarrotNode] = []
+    var carrotSpawnTimer: TimeInterval = 0
+    let carrotSpawnInterval: TimeInterval = 2.5  // Каждые 2.5 секунды
+    var carrotsCollected: Int = 0
+    
     // Ограничения платформ
     private let maxPlatforms: Int = 3
     // Минимальная дистанция по X между крайней правой платформой и новой (в пикселях сцены)
@@ -121,6 +127,24 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         print("🟩 Platform spawned at Y: \(randomY)")
     }
     
+    func spawnCarrot() {
+        let carrot = CarrotNode()
+        
+        // Случайная позиция по высоте
+        let minY: CGFloat = groundHeight + 80
+        let maxY: CGFloat = size.height - 150
+        let randomY = CGFloat.random(in: minY...maxY)
+        
+        // Появляется справа за экраном
+        carrot.position = CGPoint(x: size.width + carrot.size.width, y: randomY)
+        carrot.zPosition = 10  // Поверх фона
+        
+        addChild(carrot)
+        carrots.append(carrot)
+        
+        print("🥕 Carrot spawned at Y: \(randomY)")
+    }
+    
     func movePlatforms(deltaTime: CGFloat) {
         let moveSpeed = Constants.initialGameSpeed * 10.0 * deltaTime
         
@@ -131,6 +155,24 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         platforms.removeAll { platform in
             if platform.position.x < -platform.size.width {
                 platform.removeFromParent()
+                return true
+            }
+            return false
+        }
+    }
+    
+    func moveCarrots(deltaTime: CGFloat) {
+        let moveSpeed = Constants.initialGameSpeed * 10.0 * deltaTime
+        
+        for carrot in carrots {
+            carrot.position.x -= moveSpeed
+        }
+        
+        // Удаляем морковки за левым краем экрана
+        carrots.removeAll { carrot in
+            if carrot.position.x < -carrot.size.width {
+                carrot.removeFromParent()
+                print("🗑️ Carrot removed (off-screen)")
                 return true
             }
             return false
@@ -171,6 +213,17 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     override func update(_ currentTime: TimeInterval) {
         guard isGameRunning else { return }
         
+        // Проверка: если кролик падает слишком быстро вниз, сбрасываем состояние
+        if let velocity = rabbit.physicsBody?.velocity {
+            // Если кролик падает очень быстро и почти на земле
+            if velocity.dy < -300 && rabbit.position.y < groundHeight + 100 {
+                if !rabbit.isOnGround {
+                    print("🚨 Emergency landing detection")
+                    rabbit.landed()
+                }
+            }
+        }
+        
         if lastUpdateTime == 0 {
             lastUpdateTime = currentTime
         }
@@ -187,6 +240,15 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
         
         movePlatforms(deltaTime: CGFloat(deltaTime))
+        
+        // Спавн морковок
+        carrotSpawnTimer += deltaTime
+        if carrotSpawnTimer >= carrotSpawnInterval {
+            spawnCarrot()
+            carrotSpawnTimer = 0
+        }
+
+        moveCarrots(deltaTime: CGFloat(deltaTime))
     }
     
     func didBegin(_ contact: SKPhysicsContact) {
@@ -194,15 +256,28 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         let maskB = contact.bodyB.categoryBitMask
         let collision = maskA | maskB
         
+        // Сбор морковки (обрабатываем ПЕРВЫМ, не зависит от приземления)
+        if collision == Constants.PhysicsCategory.player | Constants.PhysicsCategory.carrot {
+            let carrotBody = (maskA == Constants.PhysicsCategory.carrot) ? contact.bodyA : contact.bodyB
+            
+            if let carrotNode = carrotBody.node as? CarrotNode {
+                collectCarrot(carrotNode)
+            }
+            return // Выходим, чтобы не обрабатывать другие коллизии
+        }
+        
         // Приземление на землю
         if collision == Constants.PhysicsCategory.player | Constants.PhysicsCategory.ground {
-            rabbit.landed()
+            // Проверяем что кролик действительно падает
+            if let velocity = rabbit.physicsBody?.velocity, velocity.dy <= 10 {
+                rabbit.landed()
+                print("🟫 Landed on ground")
+            }
             return
         }
         
         // Приземление на платформу — только если контакт "сверху"
         if collision == Constants.PhysicsCategory.player | Constants.PhysicsCategory.platform {
-            // Определяем кто игрок, кто платформа
             let playerBody = (maskA == Constants.PhysicsCategory.player) ? contact.bodyA : contact.bodyB
             let platformBody = (maskA == Constants.PhysicsCategory.platform) ? contact.bodyA : contact.bodyB
             
@@ -211,21 +286,43 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                 return
             }
             
-            // Скорость игрока должна быть вниз
-            let isFalling = (playerNode.physicsBody?.velocity.dy ?? 0) <= 0
+            // Кролик должен падать (не прыгать вверх)
+            guard let velocity = playerNode.physicsBody?.velocity, velocity.dy <= 10 else {
+                print("⚠️ Platform contact but rabbit going up (velocity.dy = \(playerNode.physicsBody?.velocity.dy ?? 0))")
+                return
+            }
             
-            // Нормаль контакта: хотим "от платформы к игроку" иметь положительный dy
-            // В SpriteKit нормаль направлена из bodyA к bodyB.
+            // Нормаль контакта должна быть "вверх"
             var normal = contact.contactNormal
-            // Если bodyA не платформа, инвертируем нормаль (чтобы она была от платформы к игроку)
             if contact.bodyA.categoryBitMask != Constants.PhysicsCategory.platform {
                 normal = CGVector(dx: -normal.dx, dy: -normal.dy)
             }
-            let isFromPlatformUp = normal.dy > 0.5
             
-            if isFalling && isFromPlatformUp {
+            // Требуем более строгую проверку нормали
+            if normal.dy > 0.7 {
                 playerNode.landed()
+                print("🟩 Landed on platform (normal.dy = \(normal.dy))")
+            } else {
+                print("⚠️ Platform contact but bad normal (dy = \(normal.dy))")
             }
+        }
+    }
+    
+    func collectCarrot(_ carrot: CarrotNode) {
+        // Увеличиваем счётчик
+        carrotsCollected += 1
+        
+        // Звук (пока заглушка)
+        AudioManager.shared.playSFX("sfx_collect_carrot")
+        
+        // Удаляем из массива
+        if let index = carrots.firstIndex(of: carrot) {
+            carrots.remove(at: index)
+        }
+        
+        // Анимация сбора
+        carrot.collect {
+            print("✨ Carrot collected! Total: \(self.carrotsCollected)")
         }
     }
 }

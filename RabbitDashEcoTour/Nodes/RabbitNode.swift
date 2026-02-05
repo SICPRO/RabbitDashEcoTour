@@ -162,9 +162,22 @@ class RabbitNode: SKSpriteNode {
     }
     
     func landed() {
+        // Защита от множественных вызовов
+        guard !isOnGround else {
+            print("⚠️ Already on ground, skipping landed()")
+            return
+        }
+        
         isOnGround = true
         hasDoubleJump = false
+        
+        // Убираем вертикальную скорость при приземлении
+        if let velocity = physicsBody?.velocity {
+            physicsBody?.velocity = CGVector(dx: velocity.dx, dy: 0)
+        }
+        
         startRunAnimation()
+        print("✅ Rabbit landed successfully")
     }
     
     func checkPlatformLanding(contact: SKPhysicsContact) {
