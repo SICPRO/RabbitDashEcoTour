@@ -52,7 +52,7 @@ class BackgroundNode: SKNode {
         layer3TileWidth = setupLayer(
             layerName: "bg_\(worldName)_layer3",
             yPosition: 0,
-            zPosition: 2,
+            zPosition: 20,
             array: &layer3Sprites,
             anchorBottom: true,
             fitToScreen: false

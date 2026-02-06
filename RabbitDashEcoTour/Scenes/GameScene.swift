@@ -16,6 +16,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     let carrotSpawnInterval: TimeInterval = 2.5  // Каждые 2.5 секунды
     var carrotsCollected: Int = 0
     
+    // Препятствия
+    var obstacles: [ObstacleNode] = []
+    var obstacleSpawnTimer: TimeInterval = 0
+    let obstacleSpawnInterval: TimeInterval = 3.5  // Каждые 3.5 секунды
+    
     // Ограничения платформ
     private let maxPlatforms: Int = 3
     // Минимальная дистанция по X между крайней правой платформой и новой (в пикселях сцены)
@@ -145,6 +150,25 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         print("🥕 Carrot spawned at Y: \(randomY)")
     }
     
+    func spawnObstacle() {
+        // Случайный тип препятствия
+        let types: [ObstacleType] = [.log, .rock, .stump, .pit, .hedgehog]
+        let randomType = types.randomElement()!
+        
+        let obstacle = ObstacleNode(type: randomType, worldName: "green_forest")
+        
+        // Позиция Y: ВСЕГДА на земле (препятствия не летают)
+        let yPosition = groundHeight + obstacle.size.height / 2
+        
+        obstacle.position = CGPoint(x: size.width + obstacle.size.width, y: yPosition)
+        obstacle.zPosition = 8
+        
+        addChild(obstacle)
+        obstacles.append(obstacle)
+        
+        print("🚧 Obstacle spawned: \(randomType.rawValue) at Y: \(yPosition)")
+    }
+    
     func movePlatforms(deltaTime: CGFloat) {
         let moveSpeed = Constants.initialGameSpeed * 10.0 * deltaTime
         
@@ -173,6 +197,24 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             if carrot.position.x < -carrot.size.width {
                 carrot.removeFromParent()
                 print("🗑️ Carrot removed (off-screen)")
+                return true
+            }
+            return false
+        }
+    }
+    
+    func moveObstacles(deltaTime: CGFloat) {
+        let moveSpeed = Constants.initialGameSpeed * 10.0 * deltaTime
+        
+        for obstacle in obstacles {
+            obstacle.position.x -= moveSpeed
+        }
+        
+        // Удаляем препятствия за левым краем экрана
+        obstacles.removeAll { obstacle in
+            if obstacle.position.x < -obstacle.size.width {
+                obstacle.removeFromParent()
+                print("🗑️ Obstacle removed (off-screen)")
                 return true
             }
             return false
@@ -249,12 +291,31 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
 
         moveCarrots(deltaTime: CGFloat(deltaTime))
+        
+        // Спавн препятствий
+        obstacleSpawnTimer += deltaTime
+        if obstacleSpawnTimer >= obstacleSpawnInterval {
+            spawnObstacle()
+            obstacleSpawnTimer = 0
+        }
+
+        moveObstacles(deltaTime: CGFloat(deltaTime))
     }
     
     func didBegin(_ contact: SKPhysicsContact) {
         let maskA = contact.bodyA.categoryBitMask
         let maskB = contact.bodyB.categoryBitMask
         let collision = maskA | maskB
+        
+        // Столкновение с препятствием → Game Over
+        if collision == Constants.PhysicsCategory.player | Constants.PhysicsCategory.obstacle {
+            let obstacleBody = (maskA == Constants.PhysicsCategory.obstacle) ? contact.bodyA : contact.bodyB
+            
+            if let obstacleNode = obstacleBody.node as? ObstacleNode {
+                hitObstacle(obstacleNode)
+            }
+            return
+        }
         
         // Сбор морковки (обрабатываем ПЕРВЫМ, не зависит от приземления)
         if collision == Constants.PhysicsCategory.player | Constants.PhysicsCategory.carrot {
@@ -324,6 +385,67 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         carrot.collect {
             print("✨ Carrot collected! Total: \(self.carrotsCollected)")
         }
+    }
+    
+    func hitObstacle(_ obstacle: ObstacleNode) {
+        guard isGameRunning else { return }
+        
+        print("💥 Hit obstacle: \(obstacle.obstacleType.rawValue)")
+        
+        // Эффект на препятствии
+        obstacle.hit()
+        
+        // Звук (пока заглушка)
+        AudioManager.shared.playSFX("sfx_hit_obstacle")
+        
+        // Game Over
+        gameOver()
+    }
+
+    func gameOver() {
+        isGameRunning = false
+        
+        // Останавливаем кролика
+        rabbit.physicsBody?.velocity = .zero
+        rabbit.removeAllActions()
+        
+        print("💀 GAME OVER!")
+        print("📊 Stats:")
+        print("   Carrots collected: \(carrotsCollected)")
+        print("   Distance: TODO")
+        
+        // TODO: Переход в бонусную игру Lucky Harvest
+        // Пока просто перезапускаем через 2 секунды
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            self.restartGame()
+        }
+    }
+
+    func restartGame() {
+        // Очищаем сцену
+        removeAllChildren()
+        
+        // Очищаем массивы
+        platforms.removeAll()
+        carrots.removeAll()
+        obstacles.removeAll()
+        
+        // Сбрасываем таймеры
+        platformSpawnTimer = 0
+        carrotSpawnTimer = 0
+        obstacleSpawnTimer = 0
+        lastUpdateTime = 0
+        carrotsCollected = 0
+        
+        // Пересоздаём сцену
+        setupPhysics()
+        setupBackground()
+        setupGround()
+        setupRabbit()
+        
+        startGame()
+        
+        print("🔄 Game restarted")
     }
 }
 

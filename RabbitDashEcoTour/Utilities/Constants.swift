@@ -14,7 +14,7 @@ struct Constants {
     }
     
     // MARK: - Game Settings
-    static let initialGameSpeed: CGFloat = 8.0
+    static let initialGameSpeed: CGFloat = 9.0
     static let speedIncreaseRate: CGFloat = 0.5
     static let maxGameSpeed: CGFloat = 20.0
     
