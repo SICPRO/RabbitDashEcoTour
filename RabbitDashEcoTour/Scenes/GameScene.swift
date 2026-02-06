@@ -6,6 +6,10 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     var ground: SKSpriteNode!
     var background: BackgroundNode!
     
+    // HUD элементы
+    var carrotCountLabel: SKLabelNode!
+    var carrotIcon: SKSpriteNode!
+    
     var platforms: [PlatformNode] = []
     var platformSpawnTimer: TimeInterval = 0
     let platformSpawnInterval: TimeInterval = 6.5  // Интервал спавна платформ
@@ -46,6 +50,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         setupBackground()
         setupGround()
         setupRabbit()
+        setupHUD()
         setupGestureRecognizers()
         
         startGame()
@@ -85,6 +90,51 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         rabbit.position = CGPoint(x: size.width * 0.5, y: rabbitY)
         rabbit.zPosition = 1
         addChild(rabbit)
+    }
+    
+    func setupHUD() {
+        // Создаём красивую панель для счётчика (по центру вверху)
+        let panelWidth: CGFloat = 180
+        let panelHeight: CGFloat = 60
+        
+        // Фон панели (округлый прямоугольник)
+        let panel = SKShapeNode(rectOf: CGSize(width: panelWidth, height: panelHeight), cornerRadius: 15)
+        panel.fillColor = UIColor(red: 0.2, green: 0.15, blue: 0.1, alpha: 0.9)
+        panel.strokeColor = UIColor(red: 0.8, green: 0.6, blue: 0.3, alpha: 1.0)
+        panel.lineWidth = 3
+        panel.position = CGPoint(x: size.width / 2, y: size.height - 50)
+        panel.zPosition = 99
+        addChild(panel)
+        
+        // Иконка морковки (слева в панели)
+        carrotIcon = SKSpriteNode(imageNamed: "hud_carrot_icon")
+        carrotIcon.size = CGSize(width: 40, height: 40)
+        carrotIcon.position = CGPoint(x: -50, y: 0)
+        carrotIcon.zPosition = 1
+        panel.addChild(carrotIcon)
+        
+        // Счётчик морковок (справа в панели)
+        carrotCountLabel = SKLabelNode(fontNamed: "Arial-BoldMT")
+        carrotCountLabel.fontSize = 36
+        carrotCountLabel.fontColor = UIColor(red: 1.0, green: 0.9, blue: 0.7, alpha: 1.0)
+        carrotCountLabel.position = CGPoint(x: 20, y: -12)
+        carrotCountLabel.horizontalAlignmentMode = .left
+        carrotCountLabel.zPosition = 1
+        carrotCountLabel.text = "0"
+        
+        // Добавляем тень для текста
+        let shadow = SKLabelNode(fontNamed: "Arial-BoldMT")
+        shadow.fontSize = 36
+        shadow.fontColor = UIColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.5)
+        shadow.position = CGPoint(x: 22, y: -14)
+        shadow.horizontalAlignmentMode = .left
+        shadow.zPosition = 0
+        shadow.text = "0"
+        panel.addChild(shadow)
+        
+        panel.addChild(carrotCountLabel)
+        
+        print("📊 HUD created")
     }
     
     private func canSpawnPlatform(currentTime: TimeInterval) -> Bool {
@@ -373,6 +423,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         // Увеличиваем счётчик
         carrotsCollected += 1
         
+        // Обновляем HUD
+        carrotCountLabel.text = "\(carrotsCollected)"
+        
         // Звук (пока заглушка)
         AudioManager.shared.playSFX("sfx_collect_carrot")
         
@@ -442,6 +495,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         setupBackground()
         setupGround()
         setupRabbit()
+        setupHUD()  // ← ВАЖНО: пересоздаём HUD!
         
         startGame()
         
