@@ -8,6 +8,7 @@ class RabbitNode: SKSpriteNode {
     private var idleTextures: [SKTexture] = []
     private var runTextures: [SKTexture] = []
     private var jumpTextures: [SKTexture] = []
+    private var hitTextures: [SKTexture] = []
     
     init() {
         let initialTexture = SKTexture(imageNamed: "rabbit_idle_1")
@@ -74,7 +75,7 @@ class RabbitNode: SKSpriteNode {
         }
         
         // Run animation
-        for i in 1...6 {
+        for i in 1...7 {
             let textureName = "rabbit_run_\(i)"
             
             if atlas.textureNames.contains(textureName) {
@@ -107,6 +108,24 @@ class RabbitNode: SKSpriteNode {
                 jumpTextures = idleTextures
             }
         
+        // Hit animation (столкновение)
+        for i in 1...7 {
+            let textureName = "rabbit_hit_\(i)"
+            if atlas.textureNames.contains(textureName) {
+                let texture = atlas.textureNamed(textureName)
+                hitTextures.append(texture)
+                print("✅ Loaded from atlas: \(textureName)")
+            } else {
+                print("❌ NOT FOUND in atlas: \(textureName)")
+            }
+        }
+
+        if hitTextures.isEmpty {
+            print("⚠️ No hit textures! Using idle")
+            hitTextures = idleTextures
+        }
+
+        print("🎨 Total hit frames: \(hitTextures.count)")
         print("🎨 Total idle frames: \(idleTextures.count)")
         print("🎨 Total run frames: \(runTextures.count)")
         print("🎨 Total jump frames: \(jumpTextures.count)")
@@ -124,6 +143,37 @@ class RabbitNode: SKSpriteNode {
         let runAction = SKAction.animate(with: runTextures, timePerFrame: 0.1)
         let repeatAction = SKAction.repeatForever(runAction)
         run(repeatAction, withKey: "run")
+    }
+    
+    func playHitAnimation(completion: @escaping () -> Void) {
+        removeAllActions()
+        
+        print("🎬 Hit textures count: \(hitTextures.count)")
+        
+        // Если текстуры не загрузились - используем idle и сразу завершаем
+        guard !hitTextures.isEmpty && hitTextures.count > 1 else {
+            print("⚠️ No hit textures, using fallback")
+            // Просто меняем текстуру и сразу вызываем completion
+            if let firstTexture = idleTextures.first {
+                self.texture = firstTexture
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                completion()
+            }
+            return
+        }
+        
+        let hitAction = SKAction.animate(with: hitTextures, timePerFrame: 0.08)
+        
+        // ИСПРАВЛЕНО: используем последовательность действий
+        let sequence = SKAction.sequence([
+            hitAction,
+            SKAction.run {
+                print("✅ Hit animation finished")
+                completion()
+            }
+        ])
+        run(sequence, withKey: "hit")
     }
     
     func startJumpAnimation() {

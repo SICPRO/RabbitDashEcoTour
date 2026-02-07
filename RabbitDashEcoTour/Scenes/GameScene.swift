@@ -6,6 +6,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     var ground: SKSpriteNode!
     var background: BackgroundNode!
     
+    // Скорость игры
+    var currentGameSpeed: CGFloat = Constants.initialGameSpeed
+    var speedIncreaseTimer: TimeInterval = 0
+    let speedIncreaseInterval: TimeInterval = 10.0  // Ускорение каждые 10 сек
+    
     // HUD элементы
     var carrotCountLabel: SKLabelNode!
     var carrotIcon: SKSpriteNode!
@@ -93,7 +98,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     func setupHUD() {
-        // Создаём красивую панель для счётчика (по центру вверху)
+        // Создаём красивую панель для счётчика (справа вверху)
         let panelWidth: CGFloat = 180
         let panelHeight: CGFloat = 60
         
@@ -102,7 +107,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         panel.fillColor = UIColor(red: 0.2, green: 0.15, blue: 0.1, alpha: 0.9)
         panel.strokeColor = UIColor(red: 0.8, green: 0.6, blue: 0.3, alpha: 1.0)
         panel.lineWidth = 3
-        panel.position = CGPoint(x: size.width / 2, y: size.height - 50)
+        panel.position = CGPoint(x: size.width - 120, y: size.height - 50)  // Справа!
         panel.zPosition = 99
         addChild(panel)
         
@@ -121,17 +126,6 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         carrotCountLabel.horizontalAlignmentMode = .left
         carrotCountLabel.zPosition = 1
         carrotCountLabel.text = "0"
-        
-        // Добавляем тень для текста
-        let shadow = SKLabelNode(fontNamed: "Arial-BoldMT")
-        shadow.fontSize = 36
-        shadow.fontColor = UIColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.5)
-        shadow.position = CGPoint(x: 22, y: -14)
-        shadow.horizontalAlignmentMode = .left
-        shadow.zPosition = 0
-        shadow.text = "0"
-        panel.addChild(shadow)
-        
         panel.addChild(carrotCountLabel)
         
         print("📊 HUD created")
@@ -220,7 +214,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     func movePlatforms(deltaTime: CGFloat) {
-        let moveSpeed = Constants.initialGameSpeed * 10.0 * deltaTime
+        let moveSpeed = currentGameSpeed * 10.0 * deltaTime
         
         for platform in platforms {
             platform.position.x -= moveSpeed
@@ -236,7 +230,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     func moveCarrots(deltaTime: CGFloat) {
-        let moveSpeed = Constants.initialGameSpeed * 10.0 * deltaTime
+        let moveSpeed = currentGameSpeed * 10.0 * deltaTime
         
         for carrot in carrots {
             carrot.position.x -= moveSpeed
@@ -254,7 +248,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     func moveObstacles(deltaTime: CGFloat) {
-        let moveSpeed = Constants.initialGameSpeed * 10.0 * deltaTime
+        let moveSpeed = currentGameSpeed * 10.0 * deltaTime
         
         for obstacle in obstacles {
             obstacle.position.x -= moveSpeed
@@ -322,7 +316,22 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         let deltaTime = currentTime - lastUpdateTime
         lastUpdateTime = currentTime
         
-        background.update(deltaTime: CGFloat(deltaTime), gameSpeed: Constants.initialGameSpeed)
+        // Постепенное ускорение игры
+        speedIncreaseTimer += deltaTime
+        if speedIncreaseTimer >= speedIncreaseInterval {
+            speedIncreaseTimer = 0
+            
+            // Увеличиваем скорость на 10%
+            let newSpeed = currentGameSpeed * 1.1
+            let maxSpeed = Constants.initialGameSpeed * 2.0
+            
+            if newSpeed <= maxSpeed {
+                currentGameSpeed = newSpeed
+                print("⚡ Speed increased to: \(currentGameSpeed)")
+            }
+        }
+        
+        background.update(deltaTime: CGFloat(deltaTime), gameSpeed: currentGameSpeed)
         
         // Спавн платформ: используем while, но вызываем spawnPlatform с проверками
         platformSpawnTimer += deltaTime
@@ -445,27 +454,51 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         
         print("💥 Hit obstacle: \(obstacle.obstacleType.rawValue)")
         
+        // Останавливаем игру
+        isGameRunning = false
+        
         // Эффект на препятствии
         obstacle.hit()
         
         // Звук (пока заглушка)
         AudioManager.shared.playSFX("sfx_hit_obstacle")
         
-        // Game Over
-        gameOver()
+        // Останавливаем движение кролика
+        rabbit.physicsBody?.velocity = .zero
+        rabbit.physicsBody?.isDynamic = false
+        
+        // Проверяем что анимация загружена
+        print("🎬 Playing hit animation...")
+        
+        // Проигрываем анимацию удара (с таймаутом на случай проблем)
+        rabbit.playHitAnimation {
+            print("🎬 Hit animation completed")
+            self.gameOver()
+        }
+        
+        // Страховка: если анимация не сработает, всё равно вызовем gameOver через 1 секунду
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            if !self.isGameRunning {
+                print("⚠️ Hit animation timeout, forcing game over")
+                self.gameOver()
+            }
+        }
     }
 
     func gameOver() {
-        isGameRunning = false
-        
-        // Останавливаем кролика
-        rabbit.physicsBody?.velocity = .zero
-        rabbit.removeAllActions()
+        // Защита от повторных вызовов
+        guard rabbit.physicsBody != nil else {
+            print("⚠️ gameOver already called, skipping")
+            return
+        }
         
         print("💀 GAME OVER!")
         print("📊 Stats:")
         print("   Carrots collected: \(carrotsCollected)")
-        print("   Distance: TODO")
+        
+        // Полностью останавливаем кролика
+        rabbit.removeAllActions()
+        rabbit.physicsBody = nil  // Удаляем физику полностью
         
         // TODO: Переход в бонусную игру Lucky Harvest
         // Пока просто перезапускаем через 2 секунды
@@ -489,13 +522,19 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         obstacleSpawnTimer = 0
         lastUpdateTime = 0
         carrotsCollected = 0
+        currentGameSpeed = Constants.initialGameSpeed
+        speedIncreaseTimer = 0
         
         // Пересоздаём сцену
         setupPhysics()
         setupBackground()
         setupGround()
         setupRabbit()
-        setupHUD()  // ← ВАЖНО: пересоздаём HUD!
+        
+        // Включаем физику кролика обратно
+        rabbit.physicsBody?.isDynamic = true
+        
+        setupHUD()
         
         startGame()
         
