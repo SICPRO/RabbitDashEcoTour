@@ -146,33 +146,38 @@ class RabbitNode: SKSpriteNode {
     }
     
     func playHitAnimation(completion: @escaping () -> Void) {
+        // Останавливаем ВСЕ текущие анимации
         removeAllActions()
         
-        print("🎬 Hit textures count: \(hitTextures.count)")
+        print("🎬 Starting hit animation with \(hitTextures.count) frames")
         
-        // Если текстуры не загрузились - используем idle и сразу завершаем
+        // Если текстуры не загрузились - используем fallback
         guard !hitTextures.isEmpty && hitTextures.count > 1 else {
             print("⚠️ No hit textures, using fallback")
-            // Просто меняем текстуру и сразу вызываем completion
             if let firstTexture = idleTextures.first {
                 self.texture = firstTexture
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                completion()
-            }
+            // Задержка перед completion
+            run(SKAction.sequence([
+                SKAction.wait(forDuration: 0.5),
+                SKAction.run(completion)
+            ]))
             return
         }
         
-        let hitAction = SKAction.animate(with: hitTextures, timePerFrame: 0.08)
+        // ИСПРАВЛЕНИЕ: Увеличиваем длительность анимации
+        let hitAction = SKAction.animate(with: hitTextures, timePerFrame: 0.12) // Было 0.08
         
-        // ИСПРАВЛЕНО: используем последовательность действий
+        // Добавляем небольшую паузу в конце
         let sequence = SKAction.sequence([
             hitAction,
+            SKAction.wait(forDuration: 0.2), // Пауза перед завершением
             SKAction.run {
                 print("✅ Hit animation finished")
                 completion()
             }
         ])
+        
         run(sequence, withKey: "hit")
     }
     

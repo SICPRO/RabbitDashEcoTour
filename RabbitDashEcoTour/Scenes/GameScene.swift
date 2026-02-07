@@ -41,6 +41,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private var lastPlatformSpawnTime: TimeInterval = 0
     
     var isGameRunning: Bool = false
+    var isGameOver: Bool = false
     var lastUpdateTime: TimeInterval = 0
     
     // Единая высота земли, используем в двух местах
@@ -278,14 +279,26 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     @objc func handleTap() {
+        // БЛОКИРУЕМ жесты если игра закончена
+        guard !isGameOver else {
+            print("⚠️ Tap blocked - game is over")
+            return
+        }
+        
         if rabbit.isOnGround {
             rabbit.normalJump()
         } else {
             rabbit.doubleJump()
         }
     }
-    
+
     @objc func handleLongPress(gesture: UILongPressGestureRecognizer) {
+        // БЛОКИРУЕМ жесты если игра закончена
+        guard !isGameOver else {
+            print("⚠️ Long press blocked - game is over")
+            return
+        }
+        
         if gesture.state == .began {
             rabbit.highJump()
         }
@@ -454,34 +467,32 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         
         print("💥 Hit obstacle: \(obstacle.obstacleType.rawValue)")
         
-        // Останавливаем игру
+        // СРАЗУ останавливаем игру И блокируем ввод
         isGameRunning = false
+        isGameOver = true  // ← ДОБАВЬ ЭТУ СТРОКУ
         
         // Эффект на препятствии
         obstacle.hit()
         
-        // Звук (пока заглушка)
+        // Звук
         AudioManager.shared.playSFX("sfx_hit_obstacle")
         
-        // Останавливаем движение кролика
-        rabbit.physicsBody?.velocity = .zero
-        rabbit.physicsBody?.isDynamic = false
-        
-        // Проверяем что анимация загружена
-        print("🎬 Playing hit animation...")
-        
-        // Проигрываем анимацию удара (с таймаутом на случай проблем)
-        rabbit.playHitAnimation {
-            print("🎬 Hit animation completed")
-            self.gameOver()
+        // ВАЖНО: Останавливаем движение кролика ПЛАВНО
+        if let velocity = rabbit.physicsBody?.velocity {
+            // Обнуляем только горизонтальную скорость
+            rabbit.physicsBody?.velocity = CGVector(dx: 0, dy: velocity.dy)
         }
         
-        // Страховка: если анимация не сработает, всё равно вызовем gameOver через 1 секунду
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            if !self.isGameRunning {
-                print("⚠️ Hit animation timeout, forcing game over")
-                self.gameOver()
-            }
+        // Отключаем гравитацию для кролика (чтобы не летел дальше)
+        rabbit.physicsBody?.affectedByGravity = false
+        rabbit.physicsBody?.velocity = .zero
+        
+        print("🎬 Playing hit animation...")
+        
+        // Проигрываем анимацию удара БЕЗ страховки (она теперь внутри)
+        rabbit.playHitAnimation {
+            print("🎬 Hit animation completed, calling gameOver")
+            self.gameOver()
         }
     }
 
@@ -501,10 +512,19 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         rabbit.physicsBody = nil  // Удаляем физику полностью
         
         // TODO: Переход в бонусную игру Lucky Harvest
-        // Пока просто перезапускаем через 2 секунды
+        // ВРЕМЕННО: перезапускаем через 2 секунды
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            self.restartGame()
+            // Пока рестарт, потом заменим на Lucky Harvest
+            self.transitionToBonusGame()
         }
+    }
+
+    // НОВАЯ функция (пока заглушка)
+    func transitionToBonusGame() {
+        print("🎰 Transitioning to Lucky Harvest...")
+        
+        // Пока просто рестарт, скоро заменим
+        self.restartGame()
     }
 
     func restartGame() {
@@ -524,6 +544,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         carrotsCollected = 0
         currentGameSpeed = Constants.initialGameSpeed
         speedIncreaseTimer = 0
+        
+        isGameOver = false
         
         // Пересоздаём сцену
         setupPhysics()
